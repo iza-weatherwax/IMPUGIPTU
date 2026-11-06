@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Réplica Fiscal IPTU</title>
+  <link rel="stylesheet" href="recursos/estilo.css">
+</head>
+<body>
+
+<header class="barra">
+  <div class="marca">
+    <img id="brasao-barra" alt="" width="34" height="38">
+    <div>
+      <strong>Assistente de Réplica Fiscal</strong>
+      <span>Impugnação de IPTU · Departamento de Fiscalização de Rendas/ISS</span>
+    </div>
+  </div>
+  <div class="barra-acoes">
+    <button type="button" id="btn-pasta" class="chip-pasta" title="Pasta onde os processos são salvos">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>
+      <span id="nome-pasta">Nenhuma pasta</span>
+    </button>
+    <button type="button" id="btn-config" class="btn fantasma">Dados do(a) fiscal</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== LISTA DE PROCESSOS ===================== -->
+  <section id="tela-lista" class="tela">
+
+    <div id="boas-vindas" class="cartao boas-vindas" hidden>
+      <div id="bv-nenhuma" hidden>
+        <h1>Escolha a pasta dos processos</h1>
+        <p>Cada processo de impugnação é salvo como um arquivo <code>.json</code> na pasta que você indicar
+          (por exemplo, uma pasta na rede do departamento). As réplicas geradas em Word ficam na subpasta
+          <code>replicas</code>. Nada é enviado para a internet.</p>
+        <div class="acoes">
+          <button type="button" class="btn primario" data-acao="escolher-pasta">Escolher pasta…</button>
+        </div>
+      </div>
+      <div id="bv-reconectar" hidden>
+        <h1>Reconectar à pasta “<span id="bv-nome-pasta"></span>”</h1>
+        <p>Por segurança, o navegador pede uma nova autorização para acessar a pasta a cada vez que o assistente é aberto.</p>
+        <div class="acoes">
+          <button type="button" class="btn primario" data-acao="reconectar">Reconectar</button>
+          <button type="button" class="btn" data-acao="escolher-pasta">Escolher outra pasta…</button>
+        </div>
+      </div>
+      <div id="bv-download" hidden>
+        <h1>Modo de compatibilidade</h1>
+        <p>Este navegador não permite gravar diretamente em uma pasta. Para salvar os processos automaticamente
+          na pasta escolhida, abra este assistente no <strong>Google Chrome</strong> ou no <strong>Microsoft Edge</strong>.</p>
+        <p>Neste modo, carregue a pasta para ver os processos já existentes. Ao salvar, o arquivo <code>.json</code>
+          é baixado: guarde-o na pasta dos processos (dica: configure o navegador para perguntar onde salvar cada arquivo).</p>
+        <div class="acoes">
+          <button type="button" class="btn primario" data-acao="carregar-pasta">Carregar processos de uma pasta…</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="painel-lista">
+      <div class="cabecalho-tela">
+        <div>
+          <h1>Processos de impugnação</h1>
+          <p class="sub" id="resumo-pasta"></p>
+        </div>
+        <div class="acoes">
+          <button type="button" class="btn" id="btn-atualizar">Atualizar</button>
+          <button type="button" class="btn" id="btn-csv">Exportar lista (CSV)</button>
+          <button type="button" class="btn primario" id="btn-novo">+ Novo processo</button>
+        </div>
+      </div>
+
+      <div class="indicadores" id="indicadores"></div>
+
+      <div class="filtros">
+        <input type="search" id="busca" placeholder="Buscar por nº do processo, CCI ou impugnante" aria-label="Buscar">
+        <select id="filtro-decisao" aria-label="Filtrar por decisão">
+          <option value="">Todas as decisões</option>
+          <option value="deferimento">Deferimento</option>
+          <option value="indeferimento">Indeferimento</option>
+          <option value="sem">Sem decisão</option>
+        </select>
+        <select id="filtro-situacao" aria-label="Filtrar por situação">
+          <option value="">Todas as situações</option>
+          <option value="rascunho">Rascunho</option>
+          <option value="emitida">Réplica emitida</option>
+        </select>
+      </div>
+
+      <div class="tabela-wrap">
+        <table class="tabela">
+          <thead>
+            <tr>
+              <th>Processo</th>
+              <th>Impugnante</th>
+              <th>CCI</th>
+              <th>Exercício</th>
+              <th>Decisão</th>
+              <th>Situação</th>
+              <th>Atualizado em</th>
+              <th class="col-acoes"><span class="sr">Ações</span></th>
+            </tr>
+          </thead>
+          <tbody id="corpo-tabela"></tbody>
+        </table>
+        <div id="lista-vazia" class="vazio" hidden></div>
+      </div>
+      <p id="aviso-invalidos" class="nota" hidden></p>
+    </div>
+  </section>
+
+  <!-- ===================== EDITOR (ASSISTENTE) ===================== -->
+  <section id="tela-editor" class="tela" hidden>
+    <div class="editor-topo">
+      <button type="button" class="btn fantasma" id="btn-voltar">← Processos</button>
+      <div class="editor-titulo">
+        <h1 id="titulo-processo">Novo processo</h1>
+        <span id="estado-salvo" class="estado-salvo"></span>
+      </div>
+      <div class="acoes">
+        <button type="button" class="btn primario" id="btn-salvar" title="Ctrl+S">Salvar processo</button>
+      </div>
+    </div>
+
+    <nav class="etapas" id="etapas" aria-label="Etapas">
+      <button type="button" data-ir="0"><span class="num">1</span><span class="rot">Processo e impugnante</span></button>
+      <button type="button" data-ir="1"><span class="num">2</span><span class="rot">Relatório técnico</span></button>
+      <button type="button" data-ir="2"><span class="num">3</span><span class="rot">Decisão do(a) fiscal</span></button>
+      <button type="button" data-ir="3"><span class="num">4</span><span class="rot">Revisão e emissão</span></button>
+    </nav>
+
+    <div class="editor-corpo">
+      <form id="formulario" class="formulario" autocomplete="off" novalidate>
+
+        <!-- Etapa 1 -->
+        <section class="etapa" data-etapa="0">
+          <h2>Identificação do processo</h2>
+          <div class="grade">
+            <label class="campo c-6">
+              <span>Número do processo <em>*</em></span>
+              <input type="text" name="processo.numero" placeholder="Ex.: 1234" inputmode="numeric">
+            </label>
+            <label class="campo c-3">
+              <span>Ano <em>*</em></span>
+              <input type="text" name="processo.ano" inputmode="numeric" maxlength="4">
+            </label>
+            <label class="campo c-3">
+              <span>Exercício do IPTU <em>*</em></span>
+              <input type="text" name="processo.exercicio" inputmode="numeric" maxlength="4" title="Ano-calendário do lançamento impugnado">
+            </label>
+            <label class="campo c-6">
+              <span>CCI do imóvel <em>*</em></span>
+              <input type="text" name="processo.cci" placeholder="Cadastro imobiliário">
+            </label>
+            <label class="campo c-6">
+              <span>Data de entrada (protocolo)</span>
+              <input type="date" name="processo.dataEntrada">
+            </label>
+            <label class="campo c-12">
+              <span>Endereço do imóvel</span>
+              <input type="text" name="processo.enderecoImovel">
+            </label>
+          </div>
+          <p class="ajuda">No documento: “Uma vez recebido o processo de nº <b>número/ano</b> […] referente ao ano-calendário de <b>exercício</b> e ao imóvel de CCI nº <b>CCI</b>”. O número também aparece no cabeçalho (“PROCESSO Nº”).</p>
+
+          <h2>Impugnante</h2>
+          <div class="grade">
+            <label class="campo c-12">
+              <span>Nome do(a) impugnante <em>*</em></span>
+              <input type="text" name="requerente.nome">
+            </label>
+            <label class="campo c-6">
+              <span>CPF/CNPJ</span>
+              <input type="text" name="requerente.documento">
+            </label>
+            <label class="campo c-6">
+              <span>Telefone / e-mail</span>
+              <input type="text" name="requerente.contato">
+            </label>
+            <label class="campo c-12">
+              <span>Alegações do(a) impugnante <small>(registro interno — não entra na réplica)</small></span>
+              <textarea name="requerente.alegacoes" rows="3" placeholder="Resumo do que foi alegado na impugnação"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <!-- Etapa 2 -->
+        <section class="etapa" data-etapa="1" hidden>
+          <h2>Relatório do(a) Técnico(a) Fiscal</h2>
+          <div class="grade">
+            <label class="campo c-8">
+              <span>Técnico(a) Fiscal responsável</span>
+              <input type="text" name="analise.tecnicoNome">
+            </label>
+            <label class="campo c-4">
+              <span>Data do relatório</span>
+              <input type="date" name="analise.dataRelatorio">
+            </label>
+          </div>
+
+          <fieldset class="grupo">
+            <legend>Opinião do(a) técnico(a) no relatório <em>*</em></legend>
+            <div class="opcoes-linha">
+              <label class="opcao"><input type="radio" name="analise.opiniaoTecnico" value="indeferimento"><span>Pelo indeferimento</span></label>
+              <label class="opcao"><input type="radio" name="analise.opiniaoTecnico" value="deferimento"><span>Pelo deferimento</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="grupo">
+            <legend>O que consta no relatório <em>*</em></legend>
+            <label class="opcao bloco"><input type="radio" name="analise.constatacao" value="confirmada">
+              <span><b>Confirma a área construída</b><small>“…consta a confirmação da área construída identificada, de ___ m² para o CCI nº …”</small></span></label>
+            <label class="opcao bloco"><input type="radio" name="analise.constatacao" value="retificada">
+              <span><b>Aponta área construída diferente da lançada</b><small>“…consta a retificação da área construída, de ___ m² para ___ m², para o CCI nº …”</small></span></label>
+            <label class="opcao bloco"><input type="radio" name="analise.constatacao" value="outra">
+              <span><b>Outra constatação</b><small>Texto livre, completando a frase “Neste, consta …”</small></span></label>
+          </fieldset>
+
+          <div class="grade" data-se="analise.constatacao=confirmada" hidden>
+            <label class="campo c-6">
+              <span>Área construída confirmada (m²) <em>*</em></span>
+              <input type="text" name="analise.areaConfirmada" inputmode="decimal" placeholder="Ex.: 125,40">
+            </label>
+          </div>
+          <div class="grade" data-se="analise.constatacao=retificada" hidden>
+            <label class="campo c-6">
+              <span>Área construída lançada (m²) <em>*</em></span>
+              <input type="text" name="analise.areaLancada" inputmode="decimal" placeholder="Ex.: 180,00">
+            </label>
+            <label class="campo c-6">
+              <span>Área construída apurada (m²) <em>*</em></span>
+              <input type="text" name="analise.areaApurada" inputmode="decimal" placeholder="Ex.: 125,40">
+            </label>
+            <p class="ajuda c-12" id="diferenca-area"></p>
+          </div>
+          <div class="grade" data-se="analise.constatacao=outra" hidden>
+            <label class="campo c-12">
+              <span>Neste, consta… <em>*</em></span>
+              <textarea name="analise.constatacaoTexto" rows="3" placeholder="Ex.: a verificação de que a edificação foi demolida antes de 1º de janeiro de {exercicio}"></textarea>
+            </label>
+          </div>
+
+          <div class="grade">
+            <label class="campo c-6">
+              <span>Área alegada pelo(a) impugnante (m²) <small>(registro interno)</small></span>
+              <input type="text" name="analise.areaAlegada" inputmode="decimal">
+            </label>
+          </div>
+
+          <h2>Texto complementar <small>(opcional)</small></h2>
+          <label class="campo">
+            <span>Parágrafo(s) adicional(is) da réplica, inserido(s) após a análise do relatório</span>
+            <textarea name="analise.paragrafoComplementar" rows="4" placeholder="Deixe em branco para seguir exatamente o modelo. Separe parágrafos com uma linha em branco."></textarea>
+          </label>
+          <div class="sugestoes" id="sugestoes"><span>Inserir sugestão:</span></div>
+          <p class="ajuda">Variáveis aceitas nos textos livres: <code>{cci}</code> <code>{protocolo}</code> <code>{exercicio}</code> <code>{impugnante}</code> <code>{area_lancada}</code> <code>{area_apurada}</code> <code>{area_confirmada}</code>. Use <code>**texto**</code> para negrito.</p>
+
+          <label class="campo">
+            <span>Observações internas <small>(não entram na réplica)</small></span>
+            <textarea name="analise.observacoes" rows="3"></textarea>
+          </label>
+        </section>
+
+        <!-- Etapa 3 -->
+        <section class="etapa" data-etapa="2" hidden>
+          <h2>Decisão do(a) fiscal</h2>
+          <p class="nota-decisao">A decisão é exclusiva do(a) fiscal responsável. O assistente apenas monta o texto
+            conforme a opção escolhida — ele não sugere nem presume o resultado.</p>
+          <p class="ref-opiniao" id="ref-opiniao"></p>
+
+          <div class="cartoes-decisao" role="radiogroup" aria-label="Decisão">
+            <label class="cartao-decisao deferimento">
+              <input type="radio" name="decisao.resultado" value="deferimento">
+              <span class="titulo">DEFERIMENTO</span>
+              <span class="desc">Opina pelo acolhimento da impugnação.</span>
+            </label>
+            <label class="cartao-decisao indeferimento">
+              <input type="radio" name="decisao.resultado" value="indeferimento">
+              <span class="titulo">INDEFERIMENTO</span>
+              <span class="desc">Opina pela manutenção do lançamento impugnado.</span>
+            </label>
+          </div>
+
+          <div id="bloco-divergencia" class="alerta" hidden>
+            <p><b>Sua decisão diverge da opinião do relatório técnico.</b> Registre a fundamentação — ela será
+              inserida na réplica antes da conclusão (“Dessa forma, …”).</p>
+            <label class="campo">
+              <span>Justificativa da divergência <em>*</em></span>
+              <textarea name="decisao.justificativaDivergencia" rows="4" placeholder="Ex.: Não obstante a opinião técnica, esta auditoria fiscal verificou que…"></textarea>
+            </label>
+          </div>
+
+          <h2>Data e assinatura</h2>
+          <div class="grade">
+            <label class="campo c-6">
+              <span>Data da réplica</span>
+              <input type="date" name="decisao.data">
+            </label>
+            <label class="opcao c-6 alinhar-base">
+              <input type="checkbox" name="decisao.incluirData">
+              <span>Incluir “Araguari/MG, <i>data</i>.” no documento <small>(o modelo não traz data)</small></span>
+            </label>
+            <label class="campo c-12">
+              <span>Nome do(a) fiscal <small>(opcional — o modelo traz apenas cargo e matrícula)</small></span>
+              <input type="text" name="fiscal.nome">
+            </label>
+            <label class="campo c-8">
+              <span>Cargo <em>*</em></span>
+              <input type="text" name="fiscal.cargo" list="lista-cargos">
+            </label>
+            <label class="campo c-4">
+              <span>Matrícula <em>*</em></span>
+              <input type="text" name="fiscal.matricula">
+            </label>
+          </div>
+          <div class="acoes-inline">
+            <button type="button" class="btn pequeno" id="btn-usar-padrao">Usar meus dados padrão</button>
+            <button type="button" class="btn pequeno" id="btn-tornar-padrao">Salvar como meus dados padrão</button>
+          </div>
+        </section>
+
+        <!-- Etapa 4 -->
+        <section class="etapa" data-etapa="3" hidden>
+          <h2>Revisão</h2>
+          <div id="resumo-revisao"></div>
+          <div id="pendencias"></div>
+
+          <h2>Texto da réplica</h2>
+          <label class="opcao">
+            <input type="checkbox" name="replica.personalizada">
+            <span>Editar o texto manualmente <small>(para ajustes pontuais de redação)</small></span>
+          </label>
+          <div id="bloco-personalizado" hidden>
+            <p class="ajuda">Separe os parágrafos com uma linha em branco. <code>**texto**</code> fica em negrito.
+              Com a edição manual ativa, mudanças nos campos das etapas anteriores <b>não</b> atualizam este texto.</p>
+            <textarea name="replica.texto" rows="16" class="texto-replica"></textarea>
+            <div class="acoes-inline">
+              <button type="button" class="btn pequeno" id="btn-restaurar-texto">Restaurar texto automático</button>
+            </div>
+          </div>
+
+          <label class="opcao espaco-assinatura">
+            <input type="checkbox" name="replica.espacoReduzido">
+            <span>Reduzir o espaço antes da assinatura <small>(o modelo deixa cerca de 6 cm em branco; útil quando o texto não cabe em uma página)</small></span>
+          </label>
+
+          <h2>Emissão</h2>
+          <div class="acoes-emissao">
+            <button type="button" class="btn primario grande" id="btn-docx">Gerar réplica (.docx)</button>
+            <button type="button" class="btn grande" id="btn-imprimir">Imprimir / salvar em PDF</button>
+            <button type="button" class="btn grande" id="btn-copiar">Copiar texto</button>
+          </div>
+          <p class="ajuda" id="destino-replica"></p>
+          <div id="historico"></div>
+        </section>
+
+        <div class="navegacao-etapas">
+          <button type="button" class="btn" id="btn-anterior">← Voltar</button>
+          <button type="button" class="btn primario" id="btn-proxima">Avançar →</button>
+        </div>
+      </form>
+
+      <aside class="previa" aria-label="Prévia da réplica">
+        <div class="previa-topo">
+          <span>Prévia da réplica</span>
+          <span id="selo-previa" class="selo"></span>
+        </div>
+        <p id="aviso-previa" class="aviso-previa" hidden></p>
+        <div class="previa-area" id="previa-area">
+          <div id="previa"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<datalist id="lista-cargos">
+  <option value="Auditora Fiscal da Receita Municipal">
+  <option value="Auditor Fiscal da Receita Municipal">
+</datalist>
+
+<!-- Dados do(a) fiscal -->
+<dialog id="dlg-config" class="dialogo">
+  <form method="dialog" id="form-config">
+    <h2>Dados do(a) fiscal</h2>
+    <p class="ajuda">Preenchem automaticamente a assinatura dos novos processos. Ficam gravados neste navegador e,
+      quando há pasta conectada, também na própria pasta (<code>_configuracao-assistente.json</code>).</p>
+    <label class="campo"><span>Nome <small>(opcional)</small></span><input type="text" name="nome"></label>
+    <label class="campo"><span>Cargo</span><input type="text" name="cargo" list="lista-cargos"></label>
+    <label class="campo"><span>Matrícula</span><input type="text" name="matricula"></label>
+    <div class="acoes">
+      <button type="button" class="btn" value="cancelar" data-fechar>Cancelar</button>
+      <button type="submit" class="btn primario" value="salvar">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Diálogo genérico -->
+<dialog id="dlg-pergunta" class="dialogo">
+  <h2 id="pergunta-titulo"></h2>
+  <div id="pergunta-texto"></div>
+  <div class="acoes" id="pergunta-botoes"></div>
+</dialog>
+
+<div id="avisos" class="avisos" aria-live="polite"></div>
+<div id="impressao" aria-hidden="true"></div>
+<input type="file" id="entrada-pasta" webkitdirectory multiple hidden>
+
+<script src="recursos/modelo-replica.js"></script>
+<script src="recursos/textos.js"></script>
+<script src="recursos/docx.js"></script>
+<script src="recursos/pasta.js"></script>
+<script src="recursos/app.js"></script>
+</body>
+</html>
